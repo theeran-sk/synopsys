@@ -1,0 +1,33 @@
+model: distance_cm = a * (1/feature) + b
+feature: eye
+feature_definition: feature = eye_px
+camera_index: 0
+a: 12573.960186393482
+b: -17.55097214620827
+rmse_cm: 0.41938453288600935
+samples:
+- distance_cm: 0.0
+  feature_value: 692.0307073952315
+  eye_px: 692.0307073952315
+  mouth_px: 398.02135608407156
+  ratio: 0.5738922497292038
+- distance_cm: 5.0
+  feature_value: 572.1210514172471
+  eye_px: 572.1210514172471
+  mouth_px: 292.43973226390267
+  ratio: 0.5101384169602041
+- distance_cm: 10.0
+  feature_value: 460.0222820430305
+  eye_px: 460.0222820430305
+  mouth_px: 252.33509466580347
+  ratio: 0.5485279834134755
+- distance_cm: 15.0
+  feature_value: 388.0032216312947
+  eye_px: 388.0032216312947
+  mouth_px: 217.27862297059966
+  ratio: 0.5613763421767057
+- distance_cm: 20.0
+  feature_value: 332.05421244128195
+  eye_px: 332.05421244128195
+  mouth_px: 181.2498256914948
+  ratio: 0.5459266710148314

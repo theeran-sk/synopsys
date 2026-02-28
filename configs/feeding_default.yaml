@@ -1,0 +1,110 @@
+backend: fake
+vision:
+  camera_index: 0
+  open_threshold: 0.12
+  open_hold_seconds: 0.5
+  show_camera: true
+control:
+  loop_hz: 20.0
+  hold_at_target_seconds: 0.3
+  max_vision_stale_seconds: 0.25
+  rearm_cooldown_seconds: 2.0
+  require_close_before_rearm: false
+  retreat_on_close_only: true
+  close_hold_seconds_for_abort: 0.7
+  approach_update_period_s: 0.35
+  approach_smoothing_alpha: 0.2
+safety:
+  max_linear_speed_mps: 0.08
+  neutral_pose_xyz:
+  - 0.22
+  - 0.0
+  - 0.18
+  workspace_min_xyz:
+  - 0.12
+  - -0.18
+  - 0.05
+  workspace_max_xyz:
+  - 0.4
+  - 0.18
+  - 0.3
+planning:
+  mouth_target_x_m: 0.31
+  y_scale_m: 0.16
+  z_scale_m: 0.08
+distance:
+  enabled: true
+  calibration_path: configs/spoon_mouth_calibration.yaml
+  print_interval_s: 0.5
+  stop_distance_cm: 1.5
+  approach_x_gain_m_per_cm: 0.003
+  max_forward_offset_m: 0.14
+  approach_push_step_m: 0.008
+  approach_direction_sign: 1.0
+  adaptive_direction: false
+  no_progress_timeout_s: 0.9
+  min_progress_cm: 0.4
+lerobot:
+  robot_type: so101_follower
+  port: /dev/tty.usbmodem5AB90674581
+  robot_id: synopsys2026
+  motors_csv: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex
+  max_relative_target: 8.0
+  move_duration_s: 1.6
+  disable_torque_on_disconnect: false
+  release_torque_on_shutdown: true
+  persist_neutral_on_shutdown: false
+  neutral_config_path: configs/feeding_default.yaml
+  use_joint_midpoint_neutral: true
+  use_horizontal_ik: true
+  link_l1_m: 0.165
+  link_l2_m: 0.19
+  spoon_offset_forward_m: 0.11
+  spoon_offset_up_m: 0.04
+  compact_on_shutdown: true
+  compact_move_duration_s: 1.2
+  compact_joints_deg:
+    shoulder_pan: 0.0
+    shoulder_lift: -105.0
+    elbow_flex: 125.0
+    wrist_flex: -20.0
+  staging_joints_deg:
+    shoulder_pan: 0.0
+    shoulder_lift: 2.5934065934065935
+    elbow_flex: 4.835164835164835
+    wrist_flex: -85.8021978021978
+  neutral_joints_deg:
+    shoulder_pan: 0.0
+    shoulder_lift: -67.56043956043956
+    elbow_flex: 68.13186813186813
+    wrist_flex: -77.89010989010988
+  ik_motor_sign:
+    shoulder_lift: 1.0
+    elbow_flex: -1.0
+    wrist_flex: 1.0
+  ik_motor_offset_deg:
+    shoulder_lift: 0.0
+    elbow_flex: 0.0
+    wrist_flex: 0.0
+  joint_limits_deg:
+    shoulder_pan:
+    - -150.0
+    - 150.0
+    shoulder_lift:
+    - -140.0
+    - 140.0
+    elbow_flex:
+    - -140.0
+    - 140.0
+    wrist_flex:
+    - -120.0
+    - 120.0
+  approach_gains_deg_per_m:
+    shoulder_pan: 20.0
+    shoulder_lift: -140.0
+    elbow_flex: -180.0
+    wrist_flex: 0.0
+  forward_reach_deg_per_m: 120.0
+  max_forward_delta_deg: 22.0
+  shoulder_forward_ratio: -0.45
+  elbow_forward_ratio: 0.75

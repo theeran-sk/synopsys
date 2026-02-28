@@ -1,0 +1,12 @@
+model: distance_cm = a * (1/ratio) + b, ratio = mouth_px/eye_px
+camera_index: 0
+a: -337.67763524299465
+b: 604.1167943182456
+rmse_cm: 5.401654271920719
+samples:
+- distance_cm: 25.0
+  ratio: 0.5846175460170593
+- distance_cm: 35.0
+  ratio: 0.5993692394989069
+- distance_cm: 45.0
+  ratio: 0.5962267862817354

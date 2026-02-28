@@ -1,0 +1,9 @@
+ik_motor_sign:
+  shoulder_lift: 1.0
+  elbow_flex: 1.0
+  wrist_flex: 1.0
+ik_motor_offset_deg:
+  shoulder_lift: -88.712912
+  elbow_flex: -68.002747
+  wrist_flex: -99.449176
+fit_rmse_deg: 26.5106
