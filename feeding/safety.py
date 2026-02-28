@@ -1,3 +1,5 @@
+"""Workspace and pose clamping utilities for basic runtime safety limits."""
+
 from __future__ import annotations
 
 from feeding.config import SafetyConfig

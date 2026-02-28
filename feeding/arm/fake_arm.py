@@ -1,3 +1,5 @@
+"""Fake arm backend that simulates motion for logic testing without hardware."""
+
 from __future__ import annotations
 
 import math

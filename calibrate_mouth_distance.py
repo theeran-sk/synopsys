@@ -1,3 +1,5 @@
+"""Interactive camera calibration utility for estimating mouth distance from face landmarks."""
+
 from __future__ import annotations
 
 import argparse

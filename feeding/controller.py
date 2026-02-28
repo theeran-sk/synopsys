@@ -1,3 +1,5 @@
+"""Main feeding state machine: wait for open mouth, approach, and retreat on close/loss."""
+
 from __future__ import annotations
 
 import logging

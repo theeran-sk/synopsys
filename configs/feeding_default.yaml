@@ -6,14 +6,10 @@ vision:
   show_camera: true
 control:
   loop_hz: 20.0
-  hold_at_target_seconds: 0.3
   max_vision_stale_seconds: 0.25
   rearm_cooldown_seconds: 2.0
   require_close_before_rearm: false
-  retreat_on_close_only: true
-  close_hold_seconds_for_abort: 0.7
   approach_update_period_s: 0.35
-  approach_smoothing_alpha: 0.2
 safety:
   max_linear_speed_mps: 0.08
   neutral_pose_xyz:
@@ -32,18 +28,6 @@ planning:
   mouth_target_x_m: 0.31
   y_scale_m: 0.16
   z_scale_m: 0.08
-distance:
-  enabled: true
-  calibration_path: configs/spoon_mouth_calibration.yaml
-  print_interval_s: 0.5
-  stop_distance_cm: 1.5
-  approach_x_gain_m_per_cm: 0.003
-  max_forward_offset_m: 0.14
-  approach_push_step_m: 0.008
-  approach_direction_sign: 1.0
-  adaptive_direction: false
-  no_progress_timeout_s: 0.9
-  min_progress_cm: 0.4
 lerobot:
   robot_type: so101_follower
   port: /dev/tty.usbmodem5AB90674581
@@ -68,11 +52,6 @@ lerobot:
     shoulder_lift: -105.0
     elbow_flex: 125.0
     wrist_flex: -20.0
-  staging_joints_deg:
-    shoulder_pan: 0.0
-    shoulder_lift: 2.5934065934065935
-    elbow_flex: 4.835164835164835
-    wrist_flex: -85.8021978021978
   neutral_joints_deg:
     shoulder_pan: 0.0
     shoulder_lift: -67.56043956043956

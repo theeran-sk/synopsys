@@ -1,3 +1,5 @@
+"""Abstract interface for perception backends that output mouth observations."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,3 +1,5 @@
+"""Shared data structures for mouth observations and Cartesian target poses."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

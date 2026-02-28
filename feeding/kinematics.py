@@ -1,3 +1,5 @@
+"""Simple planar kinematics helpers used by the LeRobot arm backend."""
+
 from __future__ import annotations
 
 import math

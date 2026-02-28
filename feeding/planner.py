@@ -1,3 +1,5 @@
+"""Maps mouth detections in image space to a coarse Cartesian target pose."""
+
 from __future__ import annotations
 
 from feeding.config import PlanningConfig, SafetyConfig

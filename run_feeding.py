@@ -1,3 +1,5 @@
+"""Run the feeding assistant using either fake or LeRobot hardware backends."""
+
 from __future__ import annotations
 
 import argparse

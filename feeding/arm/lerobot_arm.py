@@ -1,3 +1,5 @@
+"""LeRobot SO-101 follower backend for commanding and reading the physical arm."""
+
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,5 @@
+"""Abstract interface for arm backends used by the feeding controller."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

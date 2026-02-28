@@ -1,3 +1,5 @@
+"""Timing gate helpers used to require continuous mouth-open duration."""
+
 from __future__ import annotations
 
 

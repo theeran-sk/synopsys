@@ -1,3 +1,5 @@
+"""MediaPipe FaceMesh-based mouth detector and camera rendering utility."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
