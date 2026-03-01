@@ -24,6 +24,10 @@ class ArmBackend(ABC):
     def start_approach(self, target: Pose3D, now: float) -> None:
         raise NotImplementedError
 
+    def update_approach_target(self, target: Pose3D, now: float) -> None:
+        """Smoothly re-target an in-progress approach.  Default: restart from scratch."""
+        self.start_approach(target, now)
+
     @abstractmethod
     def retreat_to_neutral(self, now: float) -> None:
         raise NotImplementedError

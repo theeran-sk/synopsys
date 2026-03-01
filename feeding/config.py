@@ -24,6 +24,7 @@ class ControlConfig:
     rearm_cooldown_seconds: float = 2.0
     require_close_before_rearm: bool = True
     approach_update_period_s: float = 0.25
+    hold_on_loss_seconds: float = 3.0
 
 
 @dataclass
@@ -32,11 +33,16 @@ class SafetyConfig:
     neutral_pose_xyz: tuple[float, float, float] = (0.22, 0.0, 0.18)
     workspace_min_xyz: tuple[float, float, float] = (0.12, -0.18, 0.05)
     workspace_max_xyz: tuple[float, float, float] = (0.40, 0.18, 0.30)
+    min_trajectory_duration_s: float = 0.4
 
 
 @dataclass
 class PlanningConfig:
     mouth_target_x_m: float = 0.20
+    forward_depth_scale: float = 30.0
+    min_eye_px: float = 30.0
+    z_droop_compensation: float = 0.25
+    z_target_offset_m: float = 0.02
     y_scale_m: float = 0.16
     z_scale_m: float = 0.12
 
@@ -104,6 +110,7 @@ class LeRobotConfig:
     max_forward_delta_deg: float = 22.0
     shoulder_forward_ratio: float = -0.45
     elbow_forward_ratio: float = 0.75
+    command_period_s: float = 0.05
 
 
 @dataclass

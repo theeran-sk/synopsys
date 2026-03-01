@@ -30,10 +30,20 @@ RIGHT_EYE_OUTER = 263
 
 
 def _get_face_mesh_module():
-    if hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
-        return mp.solutions.face_mesh
-    from mediapipe.python.solutions import face_mesh
-    return face_mesh
+    # mediapipe ≥0.10.8 uses mp.solutions.face_mesh directly;
+    # older versions nest it under mediapipe.python.solutions.
+    try:
+        if hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
+            return mp.solutions.face_mesh
+    except Exception:
+        pass
+    try:
+        from mediapipe.python.solutions import face_mesh
+        return face_mesh
+    except ImportError:
+        pass
+    import importlib
+    return importlib.import_module("mediapipe.solutions.face_mesh")
 
 
 @dataclass

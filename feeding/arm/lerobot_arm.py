@@ -12,14 +12,23 @@ import math
 from feeding.arm.base import ArmBackend
 from feeding.config import LeRobotConfig, SafetyConfig
 from feeding.kinematics import Planar3LinkHorizontalIK
+from feeding.trajectory import CartesianTrajectory
 from feeding.types import Pose3D
 import yaml
 
 
 @dataclass
-class _MotionPlan:
+class _DirectMotionPlan:
+    """Joint-space target used only for compact-on-shutdown."""
     target: dict[str, float]
     done_at: float
+
+
+@dataclass
+class _TrajectoryState:
+    """Active Cartesian trajectory + label for logging."""
+    traj: CartesianTrajectory
+    mode: str
 
 
 class LeRobotArmBackend(ArmBackend):
@@ -29,12 +38,14 @@ class LeRobotArmBackend(ArmBackend):
         self.safety_cfg = safety_cfg
         self.robot_cfg = robot_cfg
         self.robot = None
-        self._motion: _MotionPlan | None = None
+        self._direct_motion: _DirectMotionPlan | None = None
+        self._traj_state: _TrajectoryState | None = None
+        self._traj_done: bool = False
         self._neutral_joints: dict[str, float] = {}
         self._joint_order = [m.strip() for m in robot_cfg.motors_csv.split(",") if m.strip()]
         self._next_command_time = 0.0
         self._joint_tolerance_deg = 1.5
-        self._command_period_s = 0.12
+        self._command_period_s = robot_cfg.command_period_s
         self._ik = Planar3LinkHorizontalIK(
             l1_m=self.robot_cfg.link_l1_m,
             l2_m=self.robot_cfg.link_l2_m,
@@ -111,7 +122,7 @@ class LeRobotArmBackend(ArmBackend):
                         for name in self._joint_order
                     }
                     now = time.monotonic()
-                    self._send_joint_target(compact_target, now)
+                    self._send_direct(compact_target, now)
                     end_time = now + max(self.robot_cfg.compact_move_duration_s, 0.2)
                     while time.monotonic() < end_time:
                         self.tick(time.monotonic())
@@ -174,9 +185,10 @@ class LeRobotArmBackend(ArmBackend):
         self.robot.send_action(action)
         return {k: action[f"{k}.pos"] for k in target}
 
-    def _send_joint_target(self, target: dict[str, float], now: float) -> None:
+    def _send_direct(self, target: dict[str, float], now: float) -> None:
+        """Joint-space target, re-sent periodically.  Used only for compact-on-shutdown."""
         clamped_target = self._issue_action(target)
-        self._motion = _MotionPlan(target=clamped_target, done_at=now + self.robot_cfg.move_duration_s)
+        self._direct_motion = _DirectMotionPlan(target=clamped_target, done_at=now + self.robot_cfg.move_duration_s)
         self._next_command_time = now + self._command_period_s
 
     def _midpoint_joints_from_limits(self) -> dict[str, float]:
@@ -217,18 +229,56 @@ class LeRobotArmBackend(ArmBackend):
             else:
                 seed_q2 = self._last_ik_q[1]
             sol = None
-            # Try full request first, then progressively back off toward neutral if unreachable.
-            for scale in (1.0, 0.85, 0.7, 0.55, 0.4, 0.25):
-                desired_x = self._neutral_tip_x + scale * dx
-                desired_z = self._neutral_tip_z + scale * dz
-                sol = self._ik.solve(
+            # Back off x first while maintaining full z (height priority).
+            # Use solve_candidates to pick the solution that best preserves height.
+            for x_scale in (1.0, 0.85, 0.7, 0.55, 0.4, 0.25):
+                desired_x = self._neutral_tip_x + x_scale * dx
+                desired_z = self._neutral_tip_z + dz
+                candidates = self._ik.solve_candidates(
                     x_tip=desired_x,
                     z_tip=desired_z,
                     phi=self._ik_phi_ref,
-                    seed_q2=seed_q2,
                 )
-                if sol is not None:
+                if not candidates:
+                    continue
+                best = None
+                best_cost = float("inf")
+                for cand in candidates:
+                    ach_x, ach_z = self._ik.forward(cand.q1, cand.q2, cand.q3)
+                    height_err = abs(ach_z - desired_z)
+                    continuity = abs(cand.q2 - seed_q2)
+                    cost = 8.0 * height_err + 0.2 * continuity
+                    if cost < best_cost:
+                        best_cost = cost
+                        best = cand
+                if best is not None:
+                    sol = best
                     break
+            # Fallback: scale both if z-preserving backoff failed.
+            if sol is None:
+                for scale in (1.0, 0.85, 0.7, 0.55, 0.4, 0.25):
+                    desired_x = self._neutral_tip_x + scale * dx
+                    desired_z = self._neutral_tip_z + scale * dz
+                    candidates = self._ik.solve_candidates(
+                        x_tip=desired_x,
+                        z_tip=desired_z,
+                        phi=self._ik_phi_ref,
+                    )
+                    if not candidates:
+                        continue
+                    best = None
+                    best_cost = float("inf")
+                    for cand in candidates:
+                        ach_x, ach_z = self._ik.forward(cand.q1, cand.q2, cand.q3)
+                        height_err = abs(ach_z - desired_z)
+                        continuity = abs(cand.q2 - seed_q2)
+                        cost = 8.0 * height_err + 0.2 * continuity
+                        if cost < best_cost:
+                            best_cost = cost
+                            best = cand
+                    if best is not None:
+                        sol = best
+                        break
             if sol is not None:
                 out["shoulder_lift"] = self._to_motor_deg("shoulder_lift", math.degrees(sol.q1))
                 out["elbow_flex"] = self._to_motor_deg("elbow_flex", math.degrees(sol.q2))
@@ -413,59 +463,157 @@ class LeRobotArmBackend(ArmBackend):
             requested_dz=requested_dz,
         )
         out.update(joint_targets)
-        self._send_joint_target(out, now)
+        self._send_direct(out, now)
         saturated = scale < 0.999
         return achieved_dx, achieved_dz, saturated
+
+    # ------------------------------------------------------------------
+    # Cartesian helpers for trajectory-based motion
+    # ------------------------------------------------------------------
+
+    def _current_cartesian_pose(self) -> tuple[float, float, float] | None:
+        """FK + shoulder_pan → (x, y, z) in the same frame as SafetyConfig neutral."""
+        joints = self._read_current_joints()
+        if not joints:
+            return None
+        tip = self.tip_pose_from_joints(joints)
+        if tip is None:
+            return None
+        tip_x, tip_z = tip
+        neutral_x = float(self.safety_cfg.neutral_pose_xyz[0])
+        neutral_y = float(self.safety_cfg.neutral_pose_xyz[1])
+        neutral_z = float(self.safety_cfg.neutral_pose_xyz[2])
+        x = neutral_x + (tip_x - self._neutral_tip_x)
+        z = neutral_z + (tip_z - self._neutral_tip_z)
+        # Back-compute y from shoulder_pan
+        y = neutral_y
+        if "shoulder_pan" in joints and "shoulder_pan" in self._neutral_joints:
+            pan_gain = float(self.robot_cfg.approach_gains_deg_per_m.get("shoulder_pan", 0.0))
+            if abs(pan_gain) > 1e-9:
+                pan_delta = joints["shoulder_pan"] - self._neutral_joints["shoulder_pan"]
+                y = neutral_y + pan_delta / pan_gain
+        return (x, y, z)
+
+    def _apply_cartesian_waypoint(self, x: float, y: float, z: float) -> None:
+        """IK-solve a Cartesian waypoint and send to servos.  Skips on IK failure."""
+        joint_target = self._target_from_pose(Pose3D(x, y, z))
+        logging.debug(
+            "waypoint cart=(%.4f,%.4f,%.4f) → joints={%s}",
+            x, y, z,
+            ", ".join(f"{k}:{v:.2f}" for k, v in joint_target.items()),
+        )
+        try:
+            self._issue_action(joint_target)
+        except RuntimeError:
+            logging.warning("Could not send waypoint (robot disconnected?).")
+
+    def _neutral_xyz(self) -> tuple[float, float, float]:
+        return (
+            float(self.safety_cfg.neutral_pose_xyz[0]),
+            float(self.safety_cfg.neutral_pose_xyz[1]),
+            float(self.safety_cfg.neutral_pose_xyz[2]),
+        )
+
+    def _start_trajectory(self, end_xyz: tuple[float, float, float], now: float, mode: str) -> None:
+        """Build a fresh trajectory from current pose (zero initial velocity)."""
+        start = self._current_cartesian_pose() or self._neutral_xyz()
+        traj = CartesianTrajectory(
+            start_xyz=start,
+            end_xyz=end_xyz,
+            t_start=now,
+            v_max=self.safety_cfg.max_linear_speed_mps,
+            min_duration=self.safety_cfg.min_trajectory_duration_s,
+        )
+        self._traj_state = _TrajectoryState(traj=traj, mode=mode)
+        self._traj_done = False
+        self._next_command_time = now
+
+    def _retarget_trajectory(self, end_xyz: tuple[float, float, float], now: float, mode: str) -> None:
+        """Smoothly blend from active trajectory to a new endpoint."""
+        if self._traj_state is not None:
+            traj = CartesianTrajectory.from_retarget(
+                self._traj_state.traj,
+                now,
+                end_xyz,
+                self.safety_cfg.max_linear_speed_mps,
+                self.safety_cfg.min_trajectory_duration_s,
+            )
+        else:
+            start = self._current_cartesian_pose() or self._neutral_xyz()
+            traj = CartesianTrajectory(
+                start_xyz=start,
+                end_xyz=end_xyz,
+                t_start=now,
+                v_max=self.safety_cfg.max_linear_speed_mps,
+                min_duration=self.safety_cfg.min_trajectory_duration_s,
+            )
+        self._traj_state = _TrajectoryState(traj=traj, mode=mode)
+        self._traj_done = False
+        self._next_command_time = now
+
+    # ------------------------------------------------------------------
+    # ArmBackend interface
+    # ------------------------------------------------------------------
 
     def goto_neutral(self, now: float) -> None:
         if not self._neutral_joints:
             self._neutral_joints = self._read_current_joints()
-        self._send_joint_target(self._neutral_joints, now)
+        self._send_direct(dict(self._neutral_joints), now)
 
     def start_approach(self, target: Pose3D, now: float) -> None:
-        joint_target = self._target_from_pose(target)
-        self._send_joint_target(joint_target, now)
+        self._start_trajectory((target.x, target.y, target.z), now, "approach")
+
+    def update_approach_target(self, target: Pose3D, now: float) -> None:
+        self._retarget_trajectory((target.x, target.y, target.z), now, "approach")
 
     def retreat_to_neutral(self, now: float) -> None:
-        self._send_joint_target(self._neutral_joints, now)
+        self._retarget_trajectory(self._neutral_xyz(), now, "retreat")
 
     def stop(self, now: float) -> None:
-        current = self._read_current_joints()
-        if current:
-            self._send_joint_target(current, now)
-            self._motion = _MotionPlan(target=current, done_at=now)
+        if self._traj_state is not None:
+            pos, _vel, _done = self._traj_state.traj.sample(now)
+            self._apply_cartesian_waypoint(*pos)
+        self._traj_state = None
 
     def tick(self, now: float) -> None:
-        if self.robot is None or self._motion is None:
+        if self.robot is None:
             return
 
-        current = self._read_current_joints()
-        if not current:
+        # Trajectory-based motion (approach / retreat / goto_neutral)
+        if self._traj_state is not None:
+            if self._traj_done:
+                return
+            if now >= self._next_command_time:
+                pos, _vel, done = self._traj_state.traj.sample(now)
+                self._apply_cartesian_waypoint(*pos)
+                self._next_command_time = now + self._command_period_s
+                if done:
+                    self._traj_done = True
             return
 
-        complete = True
-        for name, target in self._motion.target.items():
-            if name not in current:
-                continue
-            if abs(current[name] - target) > self._joint_tolerance_deg:
-                complete = False
-                break
+        # Direct joint motion (compact-on-shutdown only)
+        if self._direct_motion is not None:
+            current = self._read_current_joints()
+            if not current:
+                return
 
-        if complete:
-            self._motion = None
-            return
+            complete = True
+            for name, tgt in self._direct_motion.target.items():
+                if name not in current:
+                    continue
+                if abs(current[name] - tgt) > self._joint_tolerance_deg:
+                    complete = False
+                    break
 
-        # Fallback: don't block state machine forever if exact convergence is not reached.
-        if now >= self._motion.done_at:
-            self._motion = None
-            return
+            if complete or now >= self._direct_motion.done_at:
+                self._direct_motion = None
+                return
 
-        if now >= self._next_command_time:
-            # Keep driving toward same target without extending motion deadline.
-            self._issue_action(self._motion.target)
-            self._next_command_time = now + self._command_period_s
+            if now >= self._next_command_time:
+                self._issue_action(self._direct_motion.target)
+                self._next_command_time = now + self._command_period_s
 
     def is_motion_complete(self) -> bool:
-        if self._motion is None:
-            return True
-        return time.monotonic() >= self._motion.done_at
+        if self._traj_state is not None:
+            return self._traj_done
+        return self._direct_motion is None

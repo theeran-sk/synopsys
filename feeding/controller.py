@@ -12,6 +12,7 @@ from feeding.gating import OpenDurationGate
 from feeding.perception.base import MouthPerception
 from feeding.planner import MouthTargetPlanner
 from feeding.safety import SafetyFilter
+from feeding.types import Pose3D
 
 
 class FeedState(str, Enum):
@@ -40,12 +41,14 @@ class FeedingController:
         self._last_obs_time = 0.0
         self._saw_closed_since_last_cycle = True
         self._last_approach_cmd_time = 0.0
+        self._last_approach_target: Pose3D | None = None
+        self._detection_lost_at: float | None = None
 
     def _begin_retreat(self, now: float, reason: str) -> None:
         logging.info("Retreating to neutral: %s", reason)
-        self.arm.stop(now)
         self.arm.retreat_to_neutral(now)
         self.gate.reset()
+        self.planner.reset()
         self._cooldown_until = now + self.cfg.control.rearm_cooldown_seconds
         self.state = FeedState.RETREAT
 
@@ -89,8 +92,23 @@ class FeedingController:
                         self.gate.reset()
 
                 elif self.state == FeedState.APPROACH:
-                    if not (obs.detected and obs.is_open):
-                        self._begin_retreat(loop_start, "mouth closed or lost during approach")
+                    if self._detection_lost_at is not None:
+                        # Committed to hold — ignore detection flicker
+                        if loop_start - self._detection_lost_at >= self.cfg.control.hold_on_loss_seconds:
+                            self._detection_lost_at = None
+                            self._begin_retreat(loop_start, "hold expired, retreating")
+                    elif not (obs.detected and obs.is_open):
+                        # Smoothly nudge forward, then hold
+                        if self._last_approach_target is not None:
+                            nudge = Pose3D(
+                                x=self._last_approach_target.x + 0.02,
+                                y=self._last_approach_target.y,
+                                z=self._last_approach_target.z,
+                            )
+                            nudge = self.safety.clamp_pose(nudge)
+                            self.arm.update_approach_target(nudge, loop_start)
+                        self._detection_lost_at = loop_start
+                        logging.info("Detection lost, nudging forward and holding for %.1fs", self.cfg.control.hold_on_loss_seconds)
                     else:
                         target = self.planner.plan_target(obs)
                         target = self.safety.clamp_pose(target)
@@ -98,8 +116,12 @@ class FeedingController:
                             loop_start - self._last_approach_cmd_time
                             >= self.cfg.control.approach_update_period_s
                         ):
-                            self.arm.start_approach(target, loop_start)
+                            if self._last_approach_cmd_time == 0.0:
+                                self.arm.start_approach(target, loop_start)
+                            else:
+                                self.arm.update_approach_target(target, loop_start)
                             self._last_approach_cmd_time = loop_start
+                            self._last_approach_target = target
 
                 elif self.state == FeedState.RETREAT:
                     if self.arm.is_motion_complete():
