@@ -1,6 +1,6 @@
-# Feeding Assistant (Clean Base)
+# Feeding Assistant
 
-This folder now contains only the core code for:
+This folder contains the core code for:
 - mouth detection
 - feeding runtime control
 - robot/fake arm backends
